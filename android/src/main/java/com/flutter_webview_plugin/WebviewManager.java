@@ -1,19 +1,25 @@
 package com.flutter_webview_plugin;
 
+import android.Manifest;
+import android.app.DownloadManager;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.net.http.SslError;
 import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.GeolocationPermissions;
 import android.webkit.SslErrorHandler;
+import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -21,10 +27,12 @@ import android.webkit.WebView;
 import android.widget.FrameLayout;
 import android.provider.MediaStore;
 
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.FileProvider;
 
 import android.database.Cursor;
 import android.provider.OpenableColumns;
+import android.widget.Toast;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -39,6 +47,7 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
 import static android.app.Activity.RESULT_OK;
+import static android.content.Context.DOWNLOAD_SERVICE;
 
 /**
  * Created by lejard_h on 20/12/2017.
@@ -49,8 +58,11 @@ class WebviewManager {
     private ValueCallback<Uri> mUploadMessage;
     private ValueCallback<Uri[]> mUploadMessageArray;
     private final static int FILECHOOSER_RESULTCODE = 1;
+    private final static int PERMISSION_RESULTCODE = 5;
+
     private Uri fileUri;
     private Uri videoUri;
+    private Runnable downloadRunable;
 
     private long getFileSize(Uri fileUri) {
         Cursor returnCursor = context.getContentResolver().query(fileUri, null, null, null, null);
@@ -61,6 +73,16 @@ class WebviewManager {
 
     @TargetApi(7)
     class ResultHandler {
+        public void handlePermissionResult(int requestCode, String[] permissions, int[] grantResults){
+            if(requestCode == PERMISSION_RESULTCODE){
+                if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    if(downloadRunable!=null){
+                        downloadRunable.run();
+                    }
+                }
+                downloadRunable = null;
+            }
+        }
         public boolean handleResult(int requestCode, int resultCode, Intent intent) {
             boolean handled = false;
             if (Build.VERSION.SDK_INT >= 21) {
@@ -94,6 +116,7 @@ class WebviewManager {
                     handled = true;
                 }
             }
+
             return handled;
         }
     }
@@ -265,8 +288,52 @@ class WebviewManager {
                 callback.invoke(origin, true, false);
             }
         });
+
+        webView.setDownloadListener(new DownloadListener()
+        {
+            @Override
+            public void onDownloadStart(final String url, final String userAgent,
+                                        final String contentDisposition,final String mimeType,
+                                        long contentLength) {
+
+                downloadRunable = new Runnable() {
+                    @Override
+                    public void run() {
+                        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                        request.setMimeType(mimeType);
+                        //------------------------COOKIE!!------------------------
+                        String cookies = CookieManager.getInstance().getCookie(url);
+                        request.addRequestHeader("cookie", cookies);
+                        //------------------------COOKIE!!------------------------
+                        request.addRequestHeader("User-Agent", userAgent);
+                        request.setDescription("Downloading file...");
+                        request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType));
+                        request.allowScanningByMediaScanner();
+                        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                        request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimeType));
+                        DownloadManager dm = (DownloadManager) webView.getContext().getSystemService(DOWNLOAD_SERVICE);
+                        dm.enqueue(request);
+                    }
+                };
+                if (readAndWriteExternalStorage(context)){
+                    return;
+                }
+                downloadRunable.run();
+                downloadRunable = null;
+            }});
         registerJavaScriptChannelNames(channelNames);
     }
+
+        public static boolean readAndWriteExternalStorage(Context context){
+            if(ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED){
+                ActivityCompat.requestPermissions((Activity) context, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+                return false;
+            }else{
+                return true;
+            }
+        }
+
+
 
     private Uri getOutputFilename(String intentType) {
         String prefix = "";
