@@ -73,15 +73,18 @@ class WebviewManager {
 
     @TargetApi(7)
     class ResultHandler {
-        public void handlePermissionResult(int requestCode, String[] permissions, int[] grantResults){
+        public boolean handlePermissionResult(int requestCode, String[] permissions, int[] grantResults){
+            boolean handled = false;
             if(requestCode == PERMISSION_RESULTCODE){
                 if (grantResults.length == 1 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     if(downloadRunable!=null){
                         downloadRunable.run();
+                        handled = true;
                     }
                 }
                 downloadRunable = null;
             }
+            return handled;
         }
         public boolean handleResult(int requestCode, int resultCode, Intent intent) {
             boolean handled = false;
@@ -315,7 +318,7 @@ class WebviewManager {
                         dm.enqueue(request);
                     }
                 };
-                if (readAndWriteExternalStorage(context)){
+                if (!writeExternalStoragePermission(context)){
                     return;
                 }
                 downloadRunable.run();
@@ -324,14 +327,14 @@ class WebviewManager {
         registerJavaScriptChannelNames(channelNames);
     }
 
-        public static boolean readAndWriteExternalStorage(Context context){
-            if(ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED || ActivityCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED){
-                ActivityCompat.requestPermissions((Activity) context, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
-                return false;
-            }else{
-                return true;
-            }
+    public static boolean writeExternalStoragePermission(Context context){
+        if(ActivityCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED){
+            ActivityCompat.requestPermissions((Activity) context, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, PERMISSION_RESULTCODE);
+            return false;
+        }else{
+            return true;
         }
+    }
 
 
 

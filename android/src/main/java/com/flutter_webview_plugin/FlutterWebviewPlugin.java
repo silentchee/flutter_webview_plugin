@@ -328,9 +328,10 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    public boolean onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (webViewManager != null && webViewManager.resultHandler != null) {
-            webViewManager.resultHandler.handlePermissionResult(requestCode, permissions, grantResults);
+            return webViewManager.resultHandler.handlePermissionResult(requestCode, permissions, grantResults);
         }
+        return false;
     }
 }
