@@ -18,6 +18,7 @@ import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.GeolocationPermissions;
+import android.webkit.MimeTypeMap;
 import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
@@ -34,6 +35,7 @@ import android.database.Cursor;
 import android.provider.OpenableColumns;
 import android.widget.Toast;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -261,22 +263,56 @@ class WebviewManager {
                     intentList.add(takeVideoIntent);
                 }
                 Intent contentSelectionIntent;
-                if (Build.VERSION.SDK_INT >= 21) {
-                    final boolean allowMultiple = fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE;
-                    contentSelectionIntent = fileChooserParams.createIntent();
-                    contentSelectionIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, allowMultiple);
-                } else {
-                    contentSelectionIntent = new Intent(Intent.ACTION_GET_CONTENT);
-                    contentSelectionIntent.addCategory(Intent.CATEGORY_OPENABLE);
-                    contentSelectionIntent.setType("*/*");
+//                if (Build.VERSION.SDK_INT >= 21) {
+//                    final boolean allowMultiple = fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE;
+//                    contentSelectionIntent = fileChooserParams.createIntent();
+//                    contentSelectionIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, allowMultiple);
+//
+//                    activity.startActivityForResult(contentSelectionIntent, FILECHOOSER_RESULTCODE);
+//                    return true;
+//                } else {
+                contentSelectionIntent = new Intent(Intent.ACTION_GET_CONTENT);
+                contentSelectionIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                contentSelectionIntent.setType("*/*");
+//                }
+                if (Build.VERSION.SDK_INT>=21) {
+                    if (fileChooserParams.getAcceptTypes()!=null) {
+                        List<String> validMimeTypes = extractValidMimeTypes(fileChooserParams.getAcceptTypes());
+                        contentSelectionIntent.putExtra(Intent.EXTRA_MIME_TYPES, validMimeTypes.toArray());
+                    }
                 }
                 Intent[] intentArray = intentList.toArray(new Intent[intentList.size()]);
+
 
                 Intent chooserIntent = new Intent(Intent.ACTION_CHOOSER);
                 chooserIntent.putExtra(Intent.EXTRA_INTENT, contentSelectionIntent);
                 chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, intentArray);
                 activity.startActivityForResult(chooserIntent, FILECHOOSER_RESULTCODE);
                 return true;
+            }
+            private List<String> extractValidMimeTypes(String[] mimeTypes) {
+                List<String> results = new ArrayList<String>();
+                List<String> mimes;
+                if (mimeTypes.length == 1 && mimeTypes[0].contains(",")) {
+                    mimes = Arrays.asList(mimeTypes[0].split(","));
+                } else {
+                    mimes = Arrays.asList(mimeTypes);
+                }
+                MimeTypeMap mtm = MimeTypeMap.getSingleton();
+                for (String mime : mimes) {
+                    if (mime != null && mime.trim().startsWith(".")) {
+                        String extensionWithoutDot = mime.trim().substring(1, mime.trim().length());
+                        String derivedMime = mtm.getMimeTypeFromExtension(extensionWithoutDot);
+                        if (derivedMime != null && !results.contains(derivedMime)) {
+                            // adds valid mime type derived from the file extension
+                            results.add(derivedMime);
+                        }
+                    } else if (mtm.getExtensionFromMimeType(mime) != null && !results.contains(mime)) {
+                        // adds valid mime type checked agains file extensions mappings
+                        results.add(mime);
+                    }
+                }
+                return results;
             }
 
 
