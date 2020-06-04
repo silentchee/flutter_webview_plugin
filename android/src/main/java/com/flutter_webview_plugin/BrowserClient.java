@@ -1,7 +1,12 @@
 package com.flutter_webview_plugin;
 
 import android.annotation.TargetApi;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Build;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -67,6 +72,33 @@ public class BrowserClient extends WebViewClient {
         // returning true causes the current WebView to abort loading the URL,
         // while returning false causes the WebView to continue loading the URL as usual.
         String url = request.getUrl().toString();
+        if (url.startsWith("intent://")) {
+            try {
+                Context context = view.getContext();
+                Intent intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
+
+                if (intent != null) {
+                    view.stopLoading();
+
+                    PackageManager packageManager = context.getPackageManager();
+                    ResolveInfo info = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY);
+                    if (info != null) {
+                        context.startActivity(intent);
+                    } else {
+                        String fallbackUrl = intent.getStringExtra("browser_fallback_url");
+
+                        // or call external broswer
+                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl));
+                    context.startActivity(browserIntent);
+                    }
+
+                    return true;
+                }
+            } catch (Exception e) {
+
+            }
+        }
+
         boolean isInvalid = checkInvalidUrl(url);
         Map<String, Object> data = new HashMap<>();
         data.put("url", url);
