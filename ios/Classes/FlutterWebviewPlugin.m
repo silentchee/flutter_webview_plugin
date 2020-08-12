@@ -398,6 +398,16 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
         id data = @{@"url": navigationAction.request.URL.absoluteString};
         [channel invokeMethod:@"onUrlChanged" arguments:data];
     }
+    NSURLRequest *request = navigationAction.request;
+    NSString *fileExtension = [[request URL]absoluteString].pathExtension;
+    if(fileExtension.length && [fileExtension caseInsensitiveCompare:@"zip"] == NSOrderedSame){
+        //Do not load the zip url in the webview.
+        if ([[UIApplication sharedApplication] canOpenURL:navigationAction.request.URL]) {
+            [[UIApplication sharedApplication] openURL:navigationAction.request.URL];
+            decisionHandler(WKNavigationActionPolicyCancel);
+            return;
+        }
+    }
 
     if (_enableAppScheme ||
         ([webView.URL.scheme isEqualToString:@"http"] ||
