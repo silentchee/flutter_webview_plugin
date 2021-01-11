@@ -13,7 +13,9 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import java.net.URISyntaxException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -72,6 +74,13 @@ public class BrowserClient extends WebViewClient {
         // returning true causes the current WebView to abort loading the URL,
         // while returning false causes the WebView to continue loading the URL as usual.
         String url = request.getUrl().toString();
+        Uri uri = request.getUrl();
+
+        if(openWithSingpassMobile(uri, view)){
+            // Return true as openWithSingpassMobile method has handled the URL
+            return true;
+        }
+
         if (url.startsWith("intent://")) {
             try {
                 Context context = view.getContext();
@@ -108,10 +117,94 @@ public class BrowserClient extends WebViewClient {
         return isInvalid;
     }
 
+    private boolean openWithSingpassMobile(Uri uri, WebView view) {
+        if (
+            // (Scheme == https or intent)
+                (
+                        uri.getScheme().equalsIgnoreCase("intent") ||
+                                uri.getScheme().equalsIgnoreCase("https")
+                ) &&
+                        // AND
+                        // (Host == singpassmobile.sg or www.singpassmobile.sg AND path == qrlogin)
+            (
+                    (
+                            uri.getHost().equalsIgnoreCase("singpassmobile.sg") ||
+                                    uri.getHost().equalsIgnoreCase("www.singpassmobile.sg")
+                    ) &&
+                            uri.getPath().contains("qrlogin")
+            )
+) {
+            Context context = view.getContext();
+            PackageManager packageManager = context.getPackageManager();
+            // Singpass Mobile Chrome intent scheme
+            if (uri.getScheme().equalsIgnoreCase("intent")) {
+                // Try to parse Singpass Mobile chrome intent URL to get an intent
+                try {
+                    Intent intent = Intent.parseUri(uri.toString(),
+                            Intent.URI_INTENT_SCHEME);
+                    // Try to find activity that can handle Singpass Mobile chrome intent
+                    ResolveInfo info = packageManager.resolveActivity(intent, 0);
+                    // Singpass Mobile activity found, launch Singpass Mobile
+                    if (info != null) {
+                        context.startActivity(intent);
+                    }
+                    // Singpass Mobile not installed on device, load fallback URL from chrome intent
+                    else {
+                        String fallbackUrl = intent.getStringExtra("browser_fallback_url");
+                        view.loadUrl(fallbackUrl);
+                    }
+                }
+                // Uri parse exception, try to load Singpass Mobile landing page in webview
+                catch (URISyntaxException e) {
+                    view.loadUrl("https://singpassmobile.sg/qrlogin");
+                }
+            }
+            // Https scheme, for app link
+            else {
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                // Check if there are activities that can handle
+                if (packageManager.resolveActivity(intent, 0) != null) {
+                    List< ResolveInfo > list = packageManager.queryIntentActivities(intent,
+                            0);
+                    boolean spmInstalled = false;
+                    // Iterate handler activties and filter out SingPass Mobile
+                    for (ResolveInfo info: list) {
+                        if (info.activityInfo.packageName.equalsIgnoreCase("sg.ndi.sp")) {
+                            spmInstalled = true;
+                            break;
+                        }
+                    }
+                    // If Singpass Mobile found, launch it
+                    if (spmInstalled) {
+                        intent.setPackage("sg.ndi.sp");
+                        context.startActivity(intent);
+                    }
+                    // If Singpass Mobile not found, load Url in webview
+                    else {
+                        view.loadUrl("https://singpassmobile.sg/qrlogin");
+                    }
+                }
+                // If no activities can handle URL, load it in webview
+                else {
+                    view.loadUrl("https://singpassmobile.sg/qrlogin");
+                }
+            }
+            // Return true if this function handled the URL
+            return true;
+        }
+// Return false if URL has not been handled
+        return false;
+    }
+
     @Override
     public boolean shouldOverrideUrlLoading(WebView view, String url) {
         // returning true causes the current WebView to abort loading the URL,
         // while returning false causes the WebView to continue loading the URL as usual.
+        Uri uri = Uri.parse(url);
+        if(openWithSingpassMobile(uri, view)){
+            // Return true as openWithSingpassMobile method has handled the URL
+            return true;
+        }
         boolean isInvalid = checkInvalidUrl(url);
         Map<String, Object> data = new HashMap<>();
         data.put("url", url);
